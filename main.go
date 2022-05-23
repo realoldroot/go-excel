@@ -1,9 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"github.com/xuri/excelize/v2"
 	"io/ioutil"
+	"log"
 	"os"
 	"path"
 	"strconv"
@@ -16,10 +16,9 @@ type Man struct {
 }
 
 var (
-	outPath     = "./output"
-	outputSheet = "Sheet1"
-	manA        []*Man
-	manB        []*Man
+	outPath = "./output"
+	manA    []*Man
+	manB    []*Man
 )
 
 func main() {
@@ -37,30 +36,35 @@ func main() {
 	for _, f := range files {
 		ext := path.Ext(f.Name())
 		if ext == ".xlsx" {
-			fmt.Println(path.Base(f.Name()))
+			log.Printf("读取文件: %s\n", path.Base(f.Name()))
 			handle(f.Name())
 		}
 	}
 
 }
 
-func handle(fileName string) {
-	outputFileName := outPath + "/" + fileName
+func clearCache() {
+	manA = nil
+	manB = nil
+}
 
+func handle(fileName string) {
+	outputFileName := outPath + "/" + "_" + fileName
 	manA = make([]*Man, 0, 10)
 	manB = make([]*Man, 0, 10)
 	read(fileName)
 	match()
 	write(outputFileName)
+	clearCache()
 
 }
 
 func read(fileName string) {
 
 	f, err := excelize.OpenFile(fileName)
-	defer f.Close()
+	f.Close()
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return
 	}
 
@@ -115,29 +119,60 @@ func match() {
 }
 
 func write(outputFileName string) {
-
 	nf := excelize.NewFile()
 	defer nf.Close()
-	style, err := nf.NewStyle(&excelize.Style{
-		Fill: excelize.Fill{Type: "pattern", Color: []string{"#fff000"}, Pattern: 1},
+	styleA, err := nf.NewStyle(&excelize.Style{
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"#FFF000"}, Pattern: 1},
 	})
-	index := nf.NewSheet(outputSheet)
+	styleB, err := nf.NewStyle(&excelize.Style{
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"#008B45"}, Pattern: 1},
+	})
+
+	sheet1 := "Sheet1"
+	for i, man := range manA {
+		row := i + 1
+		colA := axis(row, 1)
+		colB := axis(row, 2)
+		err = nf.SetCellValue(sheet1, colA, man.IdCard)
+		err = nf.SetCellValue(sheet1, colB, man.Value)
+		err = nf.SetCellStyle(sheet1, colA, colB, styleA)
+	}
+
+	sheet2 := "Sheet2"
+	index := nf.NewSheet(sheet2)
+	for i, man := range manB {
+		row := i + 1
+		colA := axis(row, 1)
+		colB := axis(row, 2)
+		err = nf.SetCellValue(sheet2, colA, man.IdCard)
+		err = nf.SetCellValue(sheet2, colB, man.Value)
+		err = nf.SetCellStyle(sheet2, colA, colB, styleB)
+	}
+
+	sheet3 := "Sheet3"
+	index = nf.NewSheet(sheet3)
 	row := 0
 	for _, man := range manA {
 		row = row + 1
-		_ = nf.SetCellValue(outputSheet, axis(row, 1), man.IdCard)
-		_ = nf.SetCellValue(outputSheet, axis(row, 2), man.Value)
-		err = nf.SetCellStyle(outputSheet, axis(row, 1), axis(row, 2), style)
-
+		colA := axis(row, 1)
+		colB := axis(row, 2)
+		err = nf.SetCellValue(sheet3, colA, man.IdCard)
+		err = nf.SetCellValue(sheet3, colB, man.Value)
+		err = nf.SetCellStyle(sheet3, colA, colB, styleA)
 		if man.Items != nil {
 			for _, item := range man.Items {
 				row = row + 1
-				_ = nf.SetCellValue(outputSheet, axis(row, 1), item.IdCard)
-				_ = nf.SetCellValue(outputSheet, axis(row, 2), item.Value)
+				colAA := axis(row, 1)
+				colBB := axis(row, 2)
+				err = nf.SetCellValue(sheet3, colAA, item.IdCard)
+				err = nf.SetCellValue(sheet3, colBB, item.Value)
+				err = nf.SetCellStyle(sheet3, colAA, colBB, styleB)
 			}
 		}
 	}
-	_ = nf.SetColWidth(outputSheet, "A", "B", 20)
+	_ = nf.SetColWidth(sheet1, "A", "B", 20)
+	_ = nf.SetColWidth(sheet2, "A", "B", 20)
+	_ = nf.SetColWidth(sheet3, "A", "B", 20)
 	if err != nil {
 		println(err)
 		return
@@ -147,11 +182,24 @@ func write(outputFileName string) {
 	nf.SetActiveSheet(index)
 	// 根据指定路径保存文件
 	if err := nf.SaveAs(outputFileName); err != nil {
-		fmt.Println(err)
+		log.Println(err)
 	}
+	log.Printf("写入文件%s\t", outputFileName)
 
 }
 func axis(row, col int) string {
 	colN, _ := excelize.ColumnNumberToName(col)
 	return colN + strconv.Itoa(row)
+}
+
+func init() {
+	settingLog()
+}
+
+func settingLog() {
+	f, err := os.OpenFile("log", os.O_CREATE|os.O_APPEND|os.O_RDWR, os.ModePerm)
+	if err != nil {
+		return
+	}
+	log.SetOutput(f)
 }
