@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/xuri/excelize/v2"
 	"io/ioutil"
 	"log"
@@ -13,15 +14,20 @@ type Man struct {
 	IdCard string
 	Value  float64
 	Items  []*Man
+	Sum    float64
 }
 
 var (
 	outPath = "./output"
 	manA    []*Man
 	manB    []*Man
+
+	mapA map[string]*Man
+	mapB map[string]*Man
 )
 
 func main() {
+	log.Println("开始执行程序...")
 	files, err := ioutil.ReadDir(".")
 	if err != nil {
 		println(err)
@@ -41,19 +47,25 @@ func main() {
 		}
 	}
 
+	askExit()
+
 }
 
 func clearCache() {
 	manA = nil
 	manB = nil
+	mapA = nil
+	mapB = nil
 }
 
 func handle(fileName string) {
 	outputFileName := outPath + "/" + "_" + fileName
 	manA = make([]*Man, 0, 10)
 	manB = make([]*Man, 0, 10)
+	mapA = make(map[string]*Man)
+	mapB = make(map[string]*Man)
 	read(fileName)
-	match()
+	match2()
 	write(outputFileName)
 	clearCache()
 
@@ -71,13 +83,15 @@ func read(fileName string) {
 	rows, err := f.GetRows("Sheet1")
 	for _, row := range rows {
 		if len(row) >= 2 {
-			k1 := row[0]
-			if k1 != "" {
-				v1, _ := strconv.ParseFloat(row[1], 64)
-				manA = append(manA, &Man{
-					IdCard: k1,
-					Value:  v1,
-				})
+			k := row[0]
+			if k != "" {
+				v, _ := strconv.ParseFloat(row[1], 64)
+				data := &Man{
+					IdCard: k,
+					Value:  v,
+				}
+				manA = append(manA, data)
+				mapA[k] = data
 			}
 		}
 
@@ -86,13 +100,15 @@ func read(fileName string) {
 	rows, err = f.GetRows("Sheet2")
 	for _, row := range rows {
 		if len(row) >= 2 {
-			k1 := row[0]
-			if k1 != "" {
-				v1, _ := strconv.ParseFloat(row[1], 64)
-				manB = append(manB, &Man{
-					IdCard: k1,
-					Value:  v1,
-				})
+			k := row[0]
+			if k != "" {
+				v, _ := strconv.ParseFloat(row[1], 64)
+				data := &Man{
+					IdCard: k,
+					Value:  v,
+				}
+				manB = append(manB, data)
+				mapB[k] = data
 			}
 		}
 
@@ -116,6 +132,40 @@ func match() {
 		}
 	}
 
+}
+
+func match2() {
+	i := -1
+	for _, a := range manA {
+
+		//首先要查询b组里面是否有自己
+		self := mapB[a.IdCard]
+		if self != nil {
+			a.Items = append(a.Items, self)
+			a.Sum = a.Sum + self.Value
+		}
+
+		for a.Sum < a.Value {
+			i++
+			if i >= len(manB) {
+				break
+			}
+
+			b := manB[i]
+			//在上面会首先把自己添加进来，这里忽略自己
+			if b.IdCard == a.IdCard {
+				continue
+			}
+
+			//如果a队伍中存在b，跳过不处理
+			if mapA[b.IdCard] != nil {
+				continue
+			}
+
+			a.Items = append(a.Items, b)
+			a.Sum = a.Sum + b.Value
+		}
+	}
 }
 
 func write(outputFileName string) {
@@ -197,9 +247,15 @@ func init() {
 }
 
 func settingLog() {
-	f, err := os.OpenFile("log", os.O_CREATE|os.O_APPEND|os.O_RDWR, os.ModePerm)
-	if err != nil {
-		return
-	}
-	log.SetOutput(f)
+	//f, err := os.OpenFile("log", os.O_CREATE|os.O_APPEND|os.O_RDWR, os.ModePerm)
+	//if err != nil {
+	//	return
+	//}
+	//log.SetOutput(f)
+}
+
+func askExit() {
+	fmt.Printf("执行完成按任意键退出...")
+	b := make([]byte, 1)
+	os.Stdin.Read(b)
 }
